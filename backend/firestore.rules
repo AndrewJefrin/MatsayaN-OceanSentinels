@@ -1,0 +1,79 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // User authentication check
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Check if user owns the boat data
+    function isBoatOwner(boatNumber) {
+      return isAuthenticated() && 
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.boatNumber == boatNumber;
+    }
+    
+    // Check if user is admin
+    function isAdmin() {
+      return isAuthenticated() && 
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    // Users collection - users can read/write their own profile
+    match /users/{userId} {
+      allow read, write: if isAuthenticated() && request.auth.uid == userId;
+      allow read: if isAdmin();
+    }
+    
+    // Signal status - boat owners can read their own, admins can read all
+    match /signalStatus/{boatNumber} {
+      allow read: if isBoatOwner(boatNumber) || isAdmin();
+      allow write: if isAdmin();
+    }
+    
+    // Weather data - boat owners can read their own, admins can read/write all
+    match /weatherData/{boatNumber} {
+      allow read: if isBoatOwner(boatNumber) || isAdmin();
+      allow write: if isAdmin();
+    }
+    
+    // Alerts - boat owners can read their own, admins can create alerts
+    match /alerts/{boatNumber} {
+      allow read: if isBoatOwner(boatNumber) || isAdmin();
+      allow write: if isAdmin();
+    }
+    
+    // Safe ports - public read access
+    match /safePorts/{portId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    
+    // Chat messages - boat owners can read/write their own chats
+    match /chats/{boat1}/{boat2}/{messageId} {
+      allow read, write: if isBoatOwner(boat1) || isBoatOwner(boat2) || isAdmin();
+    }
+    
+    // Chat backup - boat owners can read/write their own
+    match /chatBackup/{boatNumber}/{messageId} {
+      allow read, write: if isBoatOwner(boatNumber) || isAdmin();
+    }
+    
+    // Settings - boat owners can read/write their own
+    match /settings/{boatNumber} {
+      allow read, write: if isBoatOwner(boatNumber) || isAdmin();
+    }
+    
+    // Login logs - boat owners can read their own, admins can read all
+    match /loginLogs/{userId}/{logId} {
+      allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      allow write: if isAdmin();
+    }
+    
+    // Emergency contacts - boat owners can manage their own
+    match /emergencyContacts/{boatNumber}/{contactId} {
+      allow read, write: if isBoatOwner(boatNumber) || isAdmin();
+    }
+  }
+} 
